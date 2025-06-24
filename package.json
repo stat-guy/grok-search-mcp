@@ -36,12 +36,12 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/user/grok-search-mcp.git"
+    "url": "https://github.com/stat-guy/grok-search-mcp.git"
   },
   "bugs": {
-    "url": "https://github.com/user/grok-search-mcp/issues"
+    "url": "https://github.com/stat-guy/grok-search-mcp/issues"
   },
-  "homepage": "https://github.com/user/grok-search-mcp#readme",
+  "homepage": "https://github.com/stat-guy/grok-search-mcp#readme",
   "preferGlobal": true,
   "files": [
     "index.js",
