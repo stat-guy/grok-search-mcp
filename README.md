@@ -36,16 +36,25 @@ A robust MCP (Model Context Protocol) server that provides comprehensive web sea
 
 ## Installation
 
-### NPX Usage (Recommended)
+### Simple 3-Step Process
 ```bash
-npx grok-search-mcp
+git clone https://github.com/stat-guy/grok-search-mcp.git
+cd grok-search-mcp
+npm install -g .
 ```
 
-### Local Installation
+### Verify Installation
+Test that the installation worked:
+
 ```bash
-git clone <repository-url>
-cd grok-search-mcp
-npm install
+npx grok-search-mcp --help
+```
+
+**Success indicator:** If you see `Grok Search MCP Server running on stdio`, your installation is ready!
+
+### Alternative: NPX Usage
+```bash
+npx grok-search-mcp
 ```
 
 ## Setup
@@ -77,6 +86,20 @@ Add the server to your Claude Desktop configuration file:
 **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
 **Windows**: `%APPDATA%/Claude/claude_desktop_config.json`
 
+```json
+{
+  "mcpServers": {
+    "grok-search": {
+      "command": "grok-search-mcp",
+      "env": {
+        "XAI_API_KEY": "your-api-key-here"
+      }
+    }
+  }
+}
+```
+
+**Alternative NPX Configuration:**
 ```json
 {
   "mcpServers": {

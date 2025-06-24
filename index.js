@@ -301,7 +301,11 @@ class GrokSearchAPI {
     }
   }
 
-  getSearchSystemPrompt(searchType) {
+  getSearchSystemPrompt(searchType, analysisMode = "basic") {
+    if (analysisMode === "comprehensive") {
+      return this.getComprehensiveSystemPrompt(searchType);
+    }
+    
     const basePrompt = `Provide current, accurate information about the following topic using live search data. Format your response as JSON with this exact structure:
 {
   "results": [
@@ -331,7 +335,97 @@ class GrokSearchAPI {
     }
   }
 
-  parseSearchResults(response, query, maxResults) {
+  getComprehensiveSystemPrompt(searchType) {
+    const comprehensivePrompt = `You are a comprehensive research analyst. Provide deep, detailed analysis of the search topic using live search data. Your response must be in JSON format with this exact structure:
+
+{
+  "query": "original search query",
+  "analysis_mode": "comprehensive",
+  "comprehensive_analysis": "A detailed 500+ word analysis providing deep context, background, and implications. Include specific details, dates, numbers, and concrete information.",
+  "key_findings": [
+    {
+      "category": "main_story|development|context|impact",
+      "title": "Specific finding title",
+      "content": "Detailed explanation with specifics, numbers, dates",
+      "sources": ["url1", "url2"],
+      "confidence": "high|medium|low"
+    }
+  ],
+  "timeline": [
+    {
+      "date": "YYYY-MM-DD",
+      "event": "Specific event description",
+      "source": "Source name",
+      "significance": "Why this event matters"
+    }
+  ],
+  "direct_quotes": [
+    {
+      "quote": "Exact quote from source",
+      "speaker": "Speaker name and title",
+      "context": "When and where this was said",
+      "source_url": "Source URL",
+      "significance": "Why this quote is important"
+    }
+  ],
+  "related_context": "Historical background, related events, and broader context that helps understand the topic",
+  "multiple_perspectives": [
+    {
+      "viewpoint": "Perspective group (e.g., supporters, critics, experts)",
+      "content": "What this group thinks/says about the topic",
+      "sources": ["url1", "url2"],
+      "reasoning": "Why this group holds this position"
+    }
+  ],
+  "implications": {
+    "short_term": "Immediate consequences and effects",
+    "long_term": "Potential long-term impacts and outcomes",
+    "stakeholders_affected": ["Group 1", "Group 2", "Group 3"]
+  },
+  "verification_status": {
+    "confirmed_facts": ["Verified information with sources"],
+    "unconfirmed_claims": ["Claims that need verification"],
+    "contradictory_information": ["Conflicting reports or information"]
+  },
+  "raw_results": [
+    {
+      "title": "Source article title",
+      "snippet": "Brief description",
+      "url": "Source URL",
+      "relevance_score": 1-10
+    }
+  ],
+  "summary": "Executive summary of the entire analysis",
+  "total_results": 10,
+  "search_time": "ISO timestamp",
+  "source": "grok-comprehensive-analysis"
+}
+
+CRITICAL INSTRUCTIONS:
+1. Extract SPECIFIC details: exact dates, numbers, names, locations
+2. Include DIRECT QUOTES with full attribution
+3. Create a TIMELINE of events with precise dates
+4. Analyze MULTIPLE PERSPECTIVES from different stakeholders
+5. Provide HISTORICAL CONTEXT and background
+6. Identify IMPLICATIONS and consequences
+7. Verify information status and note contradictions
+8. Be comprehensive but accurate - do not invent information`;
+
+    switch (searchType) {
+      case "news":
+        return comprehensivePrompt + `\n\nFOCUS: Recent news events, breaking developments, and current affairs. Emphasize timeline analysis, official statements, and evolving situation updates.`;
+      case "web":
+        return comprehensivePrompt + `\n\nFOCUS: General web content analysis including articles, blogs, and informational sources. Emphasize factual accuracy and diverse source perspectives.`;
+      case "twitter":
+      case "x":
+        return comprehensivePrompt + `\n\nFOCUS: Social media analysis including tweet sentiment, trending topics, and public opinion. Include influencer perspectives and viral content analysis.`;
+      case "general":
+      default:
+        return comprehensivePrompt + `\n\nFOCUS: Comprehensive analysis across all source types - news, web content, and social media. Provide the most complete picture possible.`;
+    }
+  }
+
+  parseSearchResults(response, query, maxResults, analysisMode = "basic") {
     try {
       const content = response.choices?.[0]?.message?.content || "";
       const citations = response.citations || [];
@@ -339,80 +433,175 @@ class GrokSearchAPI {
       // Enhanced citation processing
       const citationMetadata = this.processCitations(citations);
       
-      // Try to parse JSON from Grok's response
+      // Enhanced JSON parsing with multiple strategies
       let parsedResults = null;
-      try {
-        // Look for JSON in the response
-        const jsonMatch = content.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          parsedResults = JSON.parse(jsonMatch[0]);
+      const jsonParsingStrategies = [
+        // Strategy 1: Find complete JSON object
+        () => {
+          const jsonMatch = content.match(/\{[\s\S]*\}/);
+          return jsonMatch ? JSON.parse(jsonMatch[0]) : null;
+        },
+        // Strategy 2: Find JSON between code blocks
+        () => {
+          const codeBlockMatch = content.match(/```json\s*([\s\S]*?)\s*```/);
+          return codeBlockMatch ? JSON.parse(codeBlockMatch[1]) : null;
+        },
+        // Strategy 3: Find JSON after specific markers
+        () => {
+          const markerMatch = content.match(/(?:json|JSON|response):\s*(\{[\s\S]*\})/);
+          return markerMatch ? JSON.parse(markerMatch[1]) : null;
+        },
+        // Strategy 4: Clean and try parsing the entire content
+        () => {
+          const cleaned = content.replace(/^[^{]*/, '').replace(/[^}]*$/, '');
+          return cleaned.startsWith('{') ? JSON.parse(cleaned) : null;
         }
-      } catch (jsonError) {
-        console.error("JSON parsing failed:", jsonError.message);
+      ];
+
+      for (const strategy of jsonParsingStrategies) {
+        try {
+          parsedResults = strategy();
+          if (parsedResults) break;
+        } catch (error) {
+          // Continue to next strategy
+          continue;
+        }
       }
       
       let results = [];
       let summary = "";
+      let finalResponse = {};
       
-      if (parsedResults && parsedResults.results) {
-        // Successfully parsed JSON response
-        results = parsedResults.results.slice(0, maxResults);
-        summary = parsedResults.summary || "";
-        
-        // Enhanced results with better citation mapping
-        results = results.map((result, index) => {
-          const enhancedResult = { ...result };
+      if (parsedResults) {
+        // Check if this is a comprehensive analysis response
+        if (analysisMode === "comprehensive" && parsedResults.analysis_mode === "comprehensive") {
+          // Handle comprehensive analysis response
+          finalResponse = {
+            query: query,
+            analysis_mode: "comprehensive",
+            comprehensive_analysis: parsedResults.comprehensive_analysis || "",
+            key_findings: parsedResults.key_findings || [],
+            timeline: parsedResults.timeline || [],
+            direct_quotes: parsedResults.direct_quotes || [],
+            related_context: parsedResults.related_context || "",
+            multiple_perspectives: parsedResults.multiple_perspectives || [],
+            implications: parsedResults.implications || {},
+            verification_status: parsedResults.verification_status || {},
+            raw_results: parsedResults.raw_results || parsedResults.results || [],
+            summary: parsedResults.summary || "",
+            total_results: (parsedResults.raw_results || parsedResults.results || []).length,
+            search_time: new Date().toISOString(),
+            source: "grok-comprehensive-analysis",
+            citations: citations,
+            citation_metadata: citationMetadata
+          };
+        } else if (parsedResults.results) {
+          // Handle basic JSON response
+          results = parsedResults.results.slice(0, maxResults);
+          summary = parsedResults.summary || "";
           
-          // Enhanced citation handling
-          if (citations.length > 0) {
-            // Use provided URL or map to citation
-            enhancedResult.url = result.url || citations[index] || citations[0];
+          // Enhanced results with better citation mapping
+          results = results.map((result, index) => {
+            const enhancedResult = { ...result };
             
-            // Add citation metadata
-            const citationIndex = result.url ? 
-              citations.findIndex(cite => cite === result.url) : 
-              Math.min(index, citations.length - 1);
+            // Enhanced citation handling
+            if (citations.length > 0) {
+              // Use provided URL or map to citation
+              enhancedResult.url = result.url || citations[index] || citations[0];
               
-            if (citationIndex >= 0) {
-              enhancedResult.citation_url = citations[citationIndex];
-              enhancedResult.citation_index = citationIndex;
-              enhancedResult.citation_metadata = citationMetadata[citationIndex] || null;
+              // Add citation metadata
+              const citationIndex = result.url ? 
+                citations.findIndex(cite => cite === result.url) : 
+                Math.min(index, citations.length - 1);
+                
+              if (citationIndex >= 0) {
+                enhancedResult.citation_url = citations[citationIndex];
+                enhancedResult.citation_index = citationIndex;
+                enhancedResult.citation_metadata = citationMetadata[citationIndex] || null;
+              }
             }
-          }
-          
-          // Ensure all required fields
-          enhancedResult.source = result.source || "web-search";
-          enhancedResult.published_date = result.published_date || new Date().toISOString().split('T')[0];
-          
-          return enhancedResult;
-        });
+            
+            // Ensure all required fields
+            enhancedResult.source = result.source || "web-search";
+            enhancedResult.published_date = result.published_date || new Date().toISOString().split('T')[0];
+            
+            return enhancedResult;
+          });
+
+          finalResponse = {
+            query: query,
+            analysis_mode: analysisMode,
+            results: results,
+            citations: citations,
+            citation_metadata: citationMetadata,
+            summary: summary,
+            total_results: results.length,
+            search_time: new Date().toISOString(),
+            source: "grok-live-search"
+          };
+        } else {
+          // Parsed JSON but unexpected format
+          finalResponse = this.createFallbackResponse(query, content, citations, citationMetadata, analysisMode);
+        }
       } else {
-        // Fallback: create a single result with the full response
-        results = [{
-          title: `Search results for: ${query}`,
-          snippet: content.substring(0, 500) + (content.length > 500 ? "..." : ""),
-          url: citations[0] || null,
-          source: "grok-live-search",
-          published_date: new Date().toISOString().split('T')[0],
-          citation_url: citations[0] || null,
-          citation_index: citations.length > 0 ? 0 : null,
-          citation_metadata: citationMetadata[0] || null
-        }];
-        summary = "Live search results from Grok";
+        // No valid JSON found - create fallback response
+        finalResponse = this.createFallbackResponse(query, content, citations, citationMetadata, analysisMode);
       }
       
+      return finalResponse;
+    } catch (error) {
+      throw new Error(`Failed to parse search results: ${error.message}`);
+    }
+  }
+
+  createFallbackResponse(query, content, citations, citationMetadata, analysisMode) {
+    const fallbackResults = [{
+      title: `Search results for: ${query}`,
+      snippet: content.substring(0, 500) + (content.length > 500 ? "..." : ""),
+      url: citations[0] || null,
+      source: "grok-live-search",
+      published_date: new Date().toISOString().split('T')[0],
+      citation_url: citations[0] || null,
+      citation_index: citations.length > 0 ? 0 : null,
+      citation_metadata: citationMetadata[0] || null
+    }];
+
+    if (analysisMode === "comprehensive") {
       return {
         query: query,
-        results: results,
+        analysis_mode: "comprehensive",
+        comprehensive_analysis: content.length > 100 ? content : "Unable to extract comprehensive analysis from response",
+        key_findings: [],
+        timeline: [],
+        direct_quotes: [],
+        related_context: "Analysis could not be properly extracted from the response",
+        multiple_perspectives: [],
+        implications: {},
+        verification_status: {
+          confirmed_facts: [],
+          unconfirmed_claims: [],
+          contradictory_information: []
+        },
+        raw_results: fallbackResults,
+        summary: "Raw search results from Grok (comprehensive analysis parsing failed)",
+        total_results: 1,
+        search_time: new Date().toISOString(),
+        source: "grok-comprehensive-analysis-fallback",
+        citations: citations,
+        citation_metadata: citationMetadata
+      };
+    } else {
+      return {
+        query: query,
+        analysis_mode: analysisMode,
+        results: fallbackResults,
         citations: citations,
         citation_metadata: citationMetadata,
-        summary: summary,
-        total_results: results.length,
+        summary: "Live search results from Grok",
+        total_results: 1,
         search_time: new Date().toISOString(),
         source: "grok-live-search"
       };
-    } catch (error) {
-      throw new Error(`Failed to parse search results: ${error.message}`);
     }
   }
 
@@ -499,6 +688,12 @@ const GROK_SEARCH_TOOLS = [
           type: "string",
           description: "The web search query"
         },
+        analysis_mode: {
+          type: "string",
+          enum: ["basic", "comprehensive"],
+          default: "basic",
+          description: "Analysis mode: 'basic' returns simple search results, 'comprehensive' provides detailed analysis with timelines, quotes, multiple perspectives, and context"
+        },
         max_results: {
           type: "number",
           default: 10,
@@ -529,6 +724,12 @@ const GROK_SEARCH_TOOLS = [
         query: {
           type: "string",
           description: "The news search query"
+        },
+        analysis_mode: {
+          type: "string",
+          enum: ["basic", "comprehensive"],
+          default: "basic",
+          description: "Analysis mode: 'basic' returns simple search results, 'comprehensive' provides detailed analysis with timelines, quotes, multiple perspectives, and context"
         },
         max_results: {
           type: "number",
@@ -568,6 +769,12 @@ const GROK_SEARCH_TOOLS = [
           },
           description: "Optional list of Twitter handles to search from (without @ symbol, e.g., ['elonmusk', 'twitter'])"
         },
+        analysis_mode: {
+          type: "string",
+          enum: ["basic", "comprehensive"],
+          default: "basic",
+          description: "Analysis mode: 'basic' returns simple search results, 'comprehensive' provides detailed analysis with timelines, quotes, multiple perspectives, and context"
+        },
         max_results: {
           type: "number",
           default: 10,
@@ -605,6 +812,9 @@ class GrokSearchServer {
   constructor() {
     try {
       this.grokAPI = new GrokSearchAPI();
+      this.startTime = Date.now();
+      this.requestCount = 0;
+      this.errorCount = 0;
     } catch (error) {
       console.error("Failed to initialize Grok API:", error.message);
       process.exit(1);
@@ -612,11 +822,13 @@ class GrokSearchServer {
   }
 
   async handleSearch(toolName, args) {
+    this.requestCount++;
     try {
       const { 
         query, 
         max_results = 10, 
         search_type = "web", 
+        analysis_mode = "basic",
         handles, 
         from_date, 
         to_date 
@@ -639,14 +851,15 @@ class GrokSearchServer {
         searchHandles = handles;
       }
 
-      // Call search with date parameters
+      // Call search with date parameters and analysis mode
       const results = await this.grokAPI.search(
         query.trim(), 
         actualSearchType, 
         max_results, 
         searchHandles, 
         from_date, 
-        to_date
+        to_date,
+        analysis_mode
       );
       
       return {
@@ -657,6 +870,7 @@ class GrokSearchServer {
       };
 
     } catch (error) {
+      this.errorCount++;
       return {
         content: [{
           type: "text",
@@ -664,8 +878,55 @@ class GrokSearchServer {
             error: error.message,
             status: 'failed',
             query: args.query || "unknown",
+            search_type: args.search_type || "web",
+            analysis_mode: args.analysis_mode || "basic",
             from_date: args.from_date || null,
-            to_date: args.to_date || null
+            to_date: args.to_date || null,
+            timestamp: new Date().toISOString(),
+            request_id: `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+          }, null, 2)
+        }],
+        isError: true
+      };
+    }
+  }
+
+  async handleHealthCheck() {
+    try {
+      const apiHealth = this.grokAPI.checkHealth();
+      const uptime = Date.now() - this.startTime;
+      const successRate = this.requestCount > 0 ? 
+        (((this.requestCount - this.errorCount) / this.requestCount) * 100).toFixed(2) + "%" : 
+        "N/A";
+
+      const healthStatus = {
+        server_healthy: true,
+        api_healthy: apiHealth.healthy,
+        uptime_ms: uptime,
+        total_requests: this.requestCount,
+        error_count: this.errorCount,
+        success_rate: successRate,
+        api_details: {
+          hasApiKey: apiHealth.hasApiKey,
+          cacheSize: apiHealth.cacheSize,
+          lastError: apiHealth.lastError
+        }
+      };
+
+      return {
+        content: [{
+          type: "text",
+          text: JSON.stringify(healthStatus, null, 2)
+        }]
+      };
+    } catch (error) {
+      return {
+        content: [{
+          type: "text",
+          text: JSON.stringify({
+            server_healthy: false,
+            error: error.message,
+            timestamp: new Date().toISOString()
           }, null, 2)
         }],
         isError: true
@@ -713,6 +974,41 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     isError: true
   };
 });
+
+// Check for help flag
+if (process.argv.includes('--help') || process.argv.includes('-h')) {
+  console.log(`
+Grok Search MCP Server v1.0.0
+
+USAGE:
+  grok-search-mcp [options]
+
+OPTIONS:
+  --help, -h    Show this help message
+
+DESCRIPTION:
+  MCP server providing comprehensive web search capabilities using xAI's Grok API.
+  Supports basic search results and comprehensive analysis with timelines, quotes,
+  and multiple perspectives.
+
+ENVIRONMENT VARIABLES:
+  XAI_API_KEY          Required: Your xAI API key from https://console.x.ai/
+  GROK_TIMEOUT         Optional: Request timeout in ms (default: 30000)
+  GROK_MAX_RETRIES     Optional: Max retry attempts (default: 3)
+
+TOOLS PROVIDED:
+  - grok_search        General search with configurable types
+  - grok_web_search    Web content search
+  - grok_news_search   News and current events
+  - grok_twitter       Twitter/X posts search
+  - health_check       Server health diagnostics
+
+For setup instructions, visit: https://github.com/stat-guy/grok-search-mcp
+
+© 2025 Enhanced Grok Search MCP Server
+`);
+  process.exit(0);
+}
 
 // Run the server
 async function runServer() {
