@@ -96,26 +96,12 @@ notepad %APPDATA%\Claude\claude_desktop_config.json
 {
   "mcpServers": {
     "grok-search": {
-      "command": "grok-search-mcp",
+      "command": "npx",
+      "args": ["grok-search-mcp"],
       "env": {
         "XAI_API_KEY": "xai-your-actual-api-key-here",
         "GROK_TIMEOUT": "30000",
         "GROK_MAX_RETRIES": "3"
-      }
-    }
-  }
-}
-```
-
-#### Alternative NPX Configuration
-```json
-{
-  "mcpServers": {
-    "grok-search": {
-      "command": "npx",
-      "args": ["grok-search-mcp"],
-      "env": {
-        "XAI_API_KEY": "xai-your-actual-api-key-here"
       }
     }
   }
@@ -469,7 +455,8 @@ interface EnvironmentConfig {
 {
   "mcpServers": {
     "grok-search": {
-      "command": "grok-search-mcp",
+      "command": "npx",
+      "args": ["grok-search-mcp"],
       "env": {
         "XAI_API_KEY": "your-api-key"
       }
@@ -483,7 +470,8 @@ interface EnvironmentConfig {
 {
   "mcpServers": {
     "grok-search": {
-      "command": "grok-search-mcp",
+      "command": "npx",
+      "args": ["grok-search-mcp"],
       "env": {
         "XAI_API_KEY": "your-api-key",
         "GROK_TIMEOUT": "45000",

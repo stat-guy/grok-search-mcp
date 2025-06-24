@@ -90,20 +90,6 @@ Add the server to your Claude Desktop configuration file:
 {
   "mcpServers": {
     "grok-search": {
-      "command": "grok-search-mcp",
-      "env": {
-        "XAI_API_KEY": "your-api-key-here"
-      }
-    }
-  }
-}
-```
-
-**Alternative NPX Configuration:**
-```json
-{
-  "mcpServers": {
-    "grok-search": {
       "command": "npx",
       "args": ["grok-search-mcp"],
       "env": {
@@ -464,7 +450,7 @@ npm test
 
 ## License
 
-MIT License - see LICENSE file for details.
+This MCP server is licensed under the MIT License. This means you are free to use, modify, and distribute the software, subject to the terms and conditions of the MIT License. For more details, please see the LICENSE file in the project repository.
 
 ## Support
 
