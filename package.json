@@ -1,0 +1,52 @@
+{
+  "name": "grok-search-mcp",
+  "version": "1.0.0",
+  "description": "MCP Server for Grok Search API integration with comprehensive search capabilities",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js",
+    "build": "echo 'No build needed for pure JS'",
+    "test": "node test.js",
+    "lint": "echo 'No linting configured'",
+    "typecheck": "echo 'No TypeScript configured'"
+  },
+  "bin": {
+    "grok-search-mcp": "./index.js"
+  },
+  "keywords": [
+    "mcp",
+    "grok",
+    "search",
+    "xai",
+    "api",
+    "model-context-protocol",
+    "ai-search",
+    "twitter-search",
+    "news-search",
+    "web-search"
+  ],
+  "author": "User",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/user/grok-search-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/user/grok-search-mcp/issues"
+  },
+  "homepage": "https://github.com/user/grok-search-mcp#readme",
+  "preferGlobal": true,
+  "files": [
+    "index.js",
+    "test.js",
+    "README.md",
+    "LICENSE"
+  ]
+}
